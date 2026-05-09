@@ -58,7 +58,10 @@ Thumbs.db
 Desktop.ini
 
 ##############################
-# Codex / agents (local)
-##############################
+# Codex / agents / internal docs (local)
 .agent/
 .codex/
+AGENTS.md
+GEMINI.md
+ARCHITECTURE.md
+CONTEXT.md
