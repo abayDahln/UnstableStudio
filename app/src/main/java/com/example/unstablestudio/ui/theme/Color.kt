@@ -1,0 +1,106 @@
+package com.example.unstablestudio.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+// Unstable Studio Brand Colors
+val PrimaryColor = Color(0xFF6200EE)
+val PrimaryVariant = Color(0xFF3700B3)
+val SecondaryColor = Color(0xFF03DAC6)
+val SecondaryVariant = Color(0xFF018786)
+val BackgroundColor = Color(0xFF121212)
+val SurfaceColor = Color(0xFF121212)
+val ErrorColor = Color(0xFFCF6679)
+val OnPrimary = Color.White
+val OnSecondary = Color.Black
+val OnBackground = Color.White
+val OnSurface = Color.White
+val OnError = Color.Black
+
+// Light Theme Palette
+val Purple80 = Color(0xFFD0BCFF)
+val PurpleGrey80 = Color(0xFFCCC2DC)
+val Pink80 = Color(0xFFEFB8C8)
+
+val Purple40 = Color(0xFF6650a4)
+val PurpleGrey40 = Color(0xFF625b71)
+val Pink40 = Color(0xFF7d5260)
+
+// Android Material 3 Deep Custom Colors
+val md_theme_dark_primary = Color(0xFFD0BCFF)
+val md_theme_dark_onPrimary = Color(0xFF381E72)
+val md_theme_dark_primaryContainer = Color(0xFF4F378B)
+val md_theme_dark_onPrimaryContainer = Color(0xFFEADDFF)
+val md_theme_dark_secondary = Color(0xFFCCC2DC)
+val md_theme_dark_onSecondary = Color(0xFF332D41)
+val md_theme_dark_secondaryContainer = Color(0xFF4A4458)
+val md_theme_dark_onSecondaryContainer = Color(0xFFE8DEF8)
+val md_theme_dark_tertiary = Color(0xFFEFB8C8)
+val md_theme_dark_onTertiary = Color(0xFF492532)
+val md_theme_dark_tertiaryContainer = Color(0xFF633B48)
+val md_theme_dark_onTertiaryContainer = Color(0xFFFFD8E4)
+val md_theme_dark_error = Color(0xFFF2B8B5)
+val md_theme_dark_onError = Color(0xFF601410)
+val md_theme_dark_errorContainer = Color(0xFF8C1D18)
+val md_theme_dark_onErrorContainer = Color(0xFFF9DEDC)
+val md_theme_dark_outline = Color(0xFF938F99)
+val md_theme_dark_background = Color(0xFF1C1B1F)
+val md_theme_dark_onBackground = Color(0xFFE6E1E5)
+val md_theme_dark_surface = Color(0xFF1C1B1F)
+val md_theme_dark_onSurface = Color(0xFFE6E1E5)
+val md_theme_dark_surfaceVariant = Color(0xFF49454F)
+val md_theme_dark_onSurfaceVariant = Color(0xFFCAC4D0)
+val md_theme_dark_inverseOnSurface = Color(0xFF1C1B1F)
+val md_theme_dark_inverseSurface = Color(0xFFE6E1E5)
+val md_theme_dark_inversePrimary = Color(0xFF6750A4)
+val md_theme_dark_surfaceTint = Color(0xFFD0BCFF)
+val md_theme_dark_outlineVariant = Color(0xFF49454F)
+val md_theme_dark_scrim = Color(0xFF000000)
+
+// IDE specific colors (inspired by VS Code)
+val EditorBackground = Color(0xFF1E1E1E)
+val SidebarBackground = Color(0xFF252526)
+val MenuBarBackground = Color(0xFF323233)
+val StatusBarBackground = Color(0xFF007ACC)
+val SelectionColor = Color(0xFF264F78)
+val LineNumberColor = Color(0xFF858585)
+val CurrentLineHighlight = Color(0xFF2A2D2E)
+
+// Light Theme IDE specific colors
+val EditorBackgroundLight = Color(0xFFFFFFFF)
+val SidebarBackgroundLight = Color(0xFFF3F3F3)
+val MenuBarBackgroundLight = Color(0xFFDDDDDD)
+val StatusBarBackgroundLight = Color(0xFF007ACC)
+val SelectionColorLight = Color(0xFFADD6FF)
+val LineNumberColorLight = Color(0xFF237893)
+val CurrentLineHighlightLight = Color(0xFFE4F6FF)
+
+// Light Theme Material 3 Colors
+val md_theme_light_primary = Color(0xFF0061A4)
+val md_theme_light_onPrimary = Color(0xFFFFFFFF)
+val md_theme_light_primaryContainer = Color(0xFFD1E4FF)
+val md_theme_light_onPrimaryContainer = Color(0xFF001D36)
+val md_theme_light_secondary = Color(0xFF535F70)
+val md_theme_light_onSecondary = Color(0xFFFFFFFF)
+val md_theme_light_secondaryContainer = Color(0xFFD7E3F7)
+val md_theme_light_onSecondaryContainer = Color(0xFF101C2B)
+val md_theme_light_tertiary = Color(0xFF6B5778)
+val md_theme_light_onTertiary = Color(0xFFFFFFFF)
+val md_theme_light_tertiaryContainer = Color(0xFFF2DAFF)
+val md_theme_light_onTertiaryContainer = Color(0xFF251431)
+val md_theme_light_error = Color(0xFFBA1A1A)
+val md_theme_light_onError = Color(0xFFFFFFFF)
+val md_theme_light_errorContainer = Color(0xFFFFDAD6)
+val md_theme_light_onErrorContainer = Color(0xFF410002)
+val md_theme_light_outline = Color(0xFF73777F)
+val md_theme_light_background = Color(0xFFFDFCFF)
+val md_theme_light_onBackground = Color(0xFF1A1C1E)
+val md_theme_light_surface = Color(0xFFFDFCFF)
+val md_theme_light_onSurface = Color(0xFF1A1C1E)
+val md_theme_light_surfaceVariant = Color(0xFFDFE2EB)
+val md_theme_light_onSurfaceVariant = Color(0xFF43474E)
+val md_theme_light_inverseOnSurface = Color(0xFFF1F0F4)
+val md_theme_light_inverseSurface = Color(0xFF2F3033)
+val md_theme_light_inversePrimary = Color(0xFF9ECAFF)
+val md_theme_light_surfaceTint = Color(0xFF0061A4)
+val md_theme_light_outlineVariant = Color(0xFFC3C7CF)
+val md_theme_light_scrim = Color(0xFF000000)

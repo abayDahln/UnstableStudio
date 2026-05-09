@@ -1,0 +1,64 @@
+##############################
+# Android / Gradle / Kotlin
+##############################
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+
+.gradle/
+**/build/
+captures/
+externalNativeBuild/
+.externalNativeBuild/
+.cxx/
+
+# Local SDK/paths & secrets
+local.properties
+**/local.properties
+*.jks
+*.keystore
+*.p12
+*.pem
+keystore.properties
+signing.properties
+
+# Kotlin/Java tooling
+.kotlin/
+**/.kotlin/
+hs_err_pid*
+*.hprof
+*.log
+
+##############################
+# IDEs (Android Studio / IntelliJ)
+##############################
+*.iml
+.idea/
+!.idea/codeStyles/
+!.idea/inspectionProfiles/
+!.idea/dictionaries/
+!.idea/runConfigurations/
+
+# (Optional) keep Gradle settings shared by team
+!.idea/gradle.xml
+!.idea/jarRepositories.xml
+
+##############################
+# VS Code
+##############################
+.vscode/
+
+##############################
+# OS / misc
+##############################
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+##############################
+# Codex / agents (local)
+##############################
+.agent/
+.codex/

@@ -1,0 +1,50 @@
+{
+  "name": "Dark+ (default dark)",
+  "settings": [
+    {
+      "settings": {
+        "background": "#1E1E1E",
+        "foreground": "#D4D4D4",
+        "caret": "#AEAFAD",
+        "selection": "#264F78",
+        "lineHighlight": "#2A2D2E"
+      }
+    },
+    {
+      "scope": ["keyword", "storage", "variable.language"],
+      "settings": {
+        "foreground": "#569CD6"
+      }
+    },
+    {
+      "scope": ["string"],
+      "settings": {
+        "foreground": "#CE9178"
+      }
+    },
+    {
+      "scope": ["constant.numeric"],
+      "settings": {
+        "foreground": "#B5CEA8"
+      }
+    },
+    {
+      "scope": ["entity.name.function", "support.function"],
+      "settings": {
+        "foreground": "#DCDCAA"
+      }
+    },
+    {
+      "scope": ["comment"],
+      "settings": {
+        "foreground": "#6A9955"
+      }
+    },
+    {
+      "scope": ["entity.name.type", "entity.name.class", "support.class"],
+      "settings": {
+        "foreground": "#4EC9B0"
+      }
+    }
+  ]
+}
