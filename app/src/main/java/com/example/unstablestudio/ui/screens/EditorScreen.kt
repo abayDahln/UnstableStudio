@@ -1,16 +1,15 @@
 package com.example.unstablestudio.ui.screens
 
+import com.example.unstablestudio.ui.theme.Roboto
+
 import android.graphics.Typeface
 import android.view.KeyEvent
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.History
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -26,10 +25,15 @@ import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draganddrop.mimeTypes
 import androidx.compose.ui.draganddrop.toAndroidDragEvent
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.unstablestudio.core.common.AppLogger
 import com.example.unstablestudio.core.config.AppConstants
@@ -57,7 +61,11 @@ fun EditorScreen(
     terminalViewModel: com.example.unstablestudio.ui.viewmodels.TerminalViewModel,
     settingsRepository: com.example.unstablestudio.data.repository.SettingsRepository,
     onOpenExplorer: () -> Unit = {},
-    onOpenSettings: () -> Unit = {}
+    onOpenFolder: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    onShortcutKeysShow: () -> Unit = {},
+    onCloseProject: () -> Unit = {},
+    onExitApp: () -> Unit = {}
 ) {
     val document by viewModel.currentDocument.collectAsStateWithLifecycle()
     val openDocuments by viewModel.openDocuments.collectAsStateWithLifecycle()
@@ -171,25 +179,74 @@ fun EditorScreen(
                 onFileOpen = onOpenExplorer,
                 onFileSave = { viewModel.saveFile() },
                 onFileSaveAll = { viewModel.saveAllFiles() },
+                onFileExit = onExitApp,
                 onEditUndo = { viewModel.undo() },
                 onEditRedo = { viewModel.redo() },
                 onEditFind = { isReplaceModeInitial = false; showFindReplace = true },
-                onEditReplace = { isReplaceModeInitial = true; showFindReplace = true },
+                onEditCut = { viewModel.dispatchEditorAction(EditorAction.Cut) },
+                onEditCopy = { viewModel.dispatchEditorAction(EditorAction.Copy) },
+                onEditPaste = { viewModel.dispatchEditorAction(EditorAction.Paste) },
+                onSelectionSelectAll = { viewModel.dispatchEditorAction(EditorAction.SelectAll) },
+                onSelectionExpandSelection = {
+                    val editor = editorRef ?: return@MenuBar
+                    val cursor = editor.cursor
+                    val line = cursor.leftLine
+                    val col = cursor.leftColumn
+
+                    if (!cursor.isSelected) {
+                        val lineText = editor.text.getLineString(line)
+                        if (lineText.isEmpty()) return@MenuBar
+                        val safeCol = col.coerceIn(0, lineText.length)
+                        fun isWordChar(ch: Char): Boolean = ch.isLetterOrDigit() || ch == '_' || ch == '-'
+
+                        var start = safeCol
+                        var end = safeCol
+                        if (start < lineText.length && !isWordChar(lineText[start])) {
+                            // If on whitespace/symbol, try expand to whole line instead
+                            editor.setSelectionRegion(line, 0, line, lineText.length)
+                            return@MenuBar
+                        }
+                        while (start > 0 && isWordChar(lineText[start - 1])) start--
+                        while (end < lineText.length && isWordChar(lineText[end])) end++
+                        editor.setSelectionRegion(line, start, line, end)
+                    } else {
+                        // Simple next level: whole line
+                        val lineText = editor.text.getLineString(line)
+                        editor.setSelectionRegion(line, 0, line, lineText.length)
+                    }
+                },
+                onSelectionShrinkSelection = {
+                    val editor = editorRef ?: return@MenuBar
+                    val cursor = editor.cursor
+                    if (!cursor.isSelected) return@MenuBar
+                    // Simple behavior: shrink back to cursor (clear selection)
+                    editor.setSelectionRegion(cursor.rightLine, cursor.rightColumn, cursor.rightLine, cursor.rightColumn)
+                },
+                onSelectionCopyLineUp = { viewModel.dispatchEditorAction(EditorAction.CopyLineUp) },
+                onSelectionCopyLineDown = { viewModel.dispatchEditorAction(EditorAction.CopyLineDown) },
+                onSelectionMoveLineUp = { viewModel.dispatchEditorAction(EditorAction.MoveLineUp) },
+                onSelectionMoveLineDown = { viewModel.dispatchEditorAction(EditorAction.MoveLineDown) },
                 onViewFontSizeIncrease = { viewModel.setFontSize(fontSize + 2f) },
                 onViewFontSizeDecrease = { viewModel.setFontSize((fontSize - 2f).coerceAtLeast(8f)) },
                 onViewWordWrapToggle = { viewModel.setWordWrap(!isWordWrapEnabled) },
+                onViewShortcutKeysShow = onShortcutKeysShow,
                 onViewSettings = onOpenSettings,
                 onTerminalOpen = { showBottomPanel = true },
+                onCloseProject = onCloseProject,
                 wordWrapEnabled = isWordWrapEnabled
             )
 
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     if (openDocuments.isNotEmpty()) {
-                        var selectedTabIndex by remember { mutableStateOf(0) }
-                        LaunchedEffect(openDocuments, activeDocumentId) {
+                        val selectedTabIndex = remember(openDocuments, activeDocumentId) {
                             val index = openDocuments.indexOfFirst { it.id == activeDocumentId }
-                            selectedTabIndex = if (index < 0) 0 else if (index >= openDocuments.size) openDocuments.size - 1 else index
+                            when {
+                                openDocuments.isEmpty() -> 0
+                                index < 0 -> 0
+                                index >= openDocuments.size -> openDocuments.size - 1
+                                else -> index
+                            }
                         }
 
                         ScrollableTabRow(selectedTabIndex = selectedTabIndex, edgePadding = 0.dp, modifier = Modifier.fillMaxWidth(), divider = {}) {
@@ -232,22 +289,17 @@ fun EditorScreen(
                                             .weight(1f)
                                             .dragAndDropTarget(
                                                 shouldStartDragAndDrop = { startEvent ->
-                                                    // Only intercept plain text (which file URIs are sent as)
-                                                    startEvent.mimeTypes().contains(ClipDescription.MIMETYPE_TEXT_PLAIN)
+                                                    // Intercept sidebar drag payloads (and other text drops) to prevent
+                                                    // the system from pasting paths into the editor.
+                                                    startEvent.mimeTypes().contains("application/x-unstablestudio-node-uri") ||
+                                                        startEvent.mimeTypes().contains(ClipDescription.MIMETYPE_TEXT_PLAIN) ||
+                                                        startEvent.mimeTypes().contains(ClipDescription.MIMETYPE_TEXT_URILIST)
                                                 },
                                                 target = object : DragAndDropTarget {
                                                     override fun onDrop(event: DragAndDropEvent): Boolean {
                                                         // Consume the event to prevent the system from pasting the URI as text
                                                         // into the underlying CodeEditor view.
-                                                        val clipData = event.toAndroidDragEvent().clipData
-                                                        if (clipData != null && clipData.itemCount > 0) {
-                                                            val content = clipData.getItemAt(0).text?.toString() ?: ""
-                                                            // If it looks like a file URI from our SAF provider, we definitely block it.
-                                                            // Even if not, we block all plain text drops to this specific target 
-                                                            // to avoid messy pastes during IDE navigation.
-                                                            return true 
-                                                        }
-                                                        return false 
+                                                        return true
                                                     }
                                                 }
                                             )
@@ -274,12 +326,14 @@ fun EditorScreen(
                                             CodeEditor(ctx).apply {
                                                 editorRef = this; typefaceText = customTypeface; typefaceLineNumber = customTypeface; isWordwrap = false; setTextSize(fontSize)
                                                 isLineNumberEnabled = showLineNumbers
+                                                // Prevent any external/internal drag payload (e.g. file URI from sidebar)
+                                                // from being inserted into the editor text by the Android View system.
+                                                setOnDragListener { _, _ -> true }
                                                 val tabDist = 24 * resources.displayMetrics.density
                                                 setLineNumberMarginLeft(tabDist); setDividerMargin(tabDist, tabDist); setDividerWidth(1 * resources.displayMetrics.density)
                                                 setText(doc.content); text.isUndoEnabled = false
                                                 val scopeName = when (doc.languageId) { AppConstants.LanguageIds.KOTLIN -> AppConstants.TextMateScopes.KOTLIN; AppConstants.LanguageIds.JAVA -> AppConstants.TextMateScopes.JAVA; AppConstants.LanguageIds.JSON -> AppConstants.TextMateScopes.JSON; AppConstants.LanguageIds.XML -> AppConstants.TextMateScopes.XML; else -> null }
                                                 if (scopeName != null) com.example.unstablestudio.editor_engine.syntax.TextMateConfig.setupLanguage(this, scopeName)
-                                                disableSelectionActionWindow()
                                                 isFocusable = true
                                                 isFocusableInTouchMode = true
                                                 setSoftKeyboardEnabled(false)
@@ -390,31 +444,154 @@ fun EditorScreen(
                         }
                     } else {
                         val isProjectOpen = currentRootUri != null
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth(0.8f)) {
-                                Icon(imageVector = Icons.Default.Code, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
-                                Spacer(modifier = Modifier.height(24.dp))
-                                Text(text = if (isProjectOpen) "Unstable Studio" else "Welcome to Unstable Studio", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(text = if (isProjectOpen) "Swipe from left to open explorer or use shortcuts" else "Open a folder or choose from recent projects to start coding", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.background),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .fillMaxWidth(0.85f)
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(vertical = 32.dp)
+                            ) {
+                                // Stylized Code Icon < >
+                                Row(
+                                    modifier = Modifier.padding(bottom = 32.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ChevronLeft,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(64.dp),
+                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.ChevronRight,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(64.dp),
+                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                    )
+                                }
+
+                                Text(
+                                    text = if (isProjectOpen) "Unstable Studio" else "Welcome to Unstable Studio",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontFamily = Roboto,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    textAlign = TextAlign.Center
+                                )
+                                
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                Text(
+                                    text = if (isProjectOpen) "Slide from left to open explorer or use shortcuts" 
+                                           else "Open a folder or choose from recent projects to start coding",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontFamily = Roboto,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth(0.9f)
+                                )
+
                                 if (!isProjectOpen) {
-                                    Spacer(modifier = Modifier.height(32.dp))
-                                    Button(onClick = onOpenExplorer, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("Open Folder") }
+                                    Spacer(modifier = Modifier.height(48.dp))
+                                    
+                                    Button(
+                                        onClick = onOpenFolder,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(56.dp),
+                                        shape = RoundedCornerShape(28.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary
+                                        )
+                                    ) {
+                                        Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(24.dp))
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text("Open Folder", fontSize = 18.sp, fontWeight = FontWeight.Medium, fontFamily = Roboto)
+                                    }
+
                                     if (recentProjects.isNotEmpty()) {
-                                        Spacer(modifier = Modifier.height(40.dp))
-                                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                            Text(text = "Recent Projects", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                                            Spacer(modifier = Modifier.weight(1f))
-                                            TextButton(onClick = { settingsRepository.clearRecentProjects() }) { Text("Clear", style = MaterialTheme.typography.labelMedium) }
+                                        Spacer(modifier = Modifier.height(56.dp))
+                                        
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                text = "Recent Projects",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontFamily = Roboto,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            TextButton(onClick = { settingsRepository.clearRecentProjects() }) {
+                                                Text("Clear", fontWeight = FontWeight.Bold, fontFamily = Roboto)
+                                            }
                                         }
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
-                                            items(recentProjects.take(10)) { projectUri ->
-                                                val projectName = try { android.net.Uri.parse(projectUri).lastPathSegment ?: projectUri } catch (e: Exception) { projectUri }
-                                                Surface(onClick = { workspaceViewModel.openWorkspace(projectUri) }, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                                                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                        Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                        Spacer(modifier = Modifier.width(16.dp)); Column { Text(text = projectName, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface); Text(text = projectUri, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                        
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            recentProjects.take(5).forEach { projectUri ->
+                                                val projectName = try {
+                                                    val uri = android.net.Uri.parse(projectUri)
+                                                    val path = uri.path ?: projectUri
+                                                    path.substringAfterLast(':').substringAfterLast('/')
+                                                } catch (e: Exception) {
+                                                    projectUri
+                                                }
+                                                
+                                                Surface(
+                                                    onClick = { workspaceViewModel.openWorkspace(projectUri) },
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(16.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(40.dp)
+                                                                .clip(RoundedCornerShape(8.dp))
+                                                                .background(MaterialTheme.colorScheme.surface),
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            Icon(
+                                                                Icons.Default.History,
+                                                                contentDescription = null,
+                                                                modifier = Modifier.size(24.dp),
+                                                                tint = MaterialTheme.colorScheme.primary
+                                                            )
+                                                        }
+                                                        Spacer(modifier = Modifier.width(16.dp))
+                                                        Column(modifier = Modifier.weight(1f)) {
+                                                            Text(
+                                                                text = projectName,
+                                                                style = MaterialTheme.typography.bodyLarge,
+                                                                fontFamily = Roboto,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = MaterialTheme.colorScheme.onSurface
+                                                            )
+                                                            Text(
+                                                                text = projectUri,
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                fontFamily = Roboto,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }
@@ -422,7 +599,15 @@ fun EditorScreen(
                                     }
                                 } else {
                                     Spacer(modifier = Modifier.height(48.dp))
-                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(
+                                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                                                RoundedCornerShape(16.dp)
+                                            )
+                                            .padding(20.dp)
+                                    ) {
                                         ShortcutHint("Slide from left", "Open Explorer")
                                         ShortcutHint("Ctrl + O", "Open Folder")
                                         ShortcutHint("Ctrl + S", "Save File")

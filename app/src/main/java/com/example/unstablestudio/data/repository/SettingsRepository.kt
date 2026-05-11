@@ -95,6 +95,9 @@ class SettingsRepository private constructor(context: Context) {
             ?: emptyList()
     )
     val openFiles: StateFlow<List<String>> = _openFiles.asStateFlow()
+    
+    private val _activeDocumentId = MutableStateFlow(prefs.getString(AppConstants.PrefKeys.ACTIVE_DOCUMENT_ID, null))
+    val activeDocumentId: StateFlow<String?> = _activeDocumentId.asStateFlow()
 
     fun setFontSize(size: Float) {
         prefs.edit().putFloat(AppConstants.PrefKeys.FONT_SIZE, size).apply()
@@ -166,7 +169,7 @@ class SettingsRepository private constructor(context: Context) {
     fun setLastRootUri(uri: String?) {
         prefs.edit().putString(AppConstants.PrefKeys.LAST_ROOT_URI, uri).apply()
         _lastRootUri.value = uri
-        if (uri != null) {
+        if (!uri.isNullOrEmpty()) {
             val currentRecent = _recentProjects.value.toMutableList()
             currentRecent.remove(uri)
             currentRecent.add(0, uri)
@@ -194,5 +197,16 @@ class SettingsRepository private constructor(context: Context) {
     fun setFilesForWorkspace(workspaceUri: String, uris: List<String>) {
         val key = "open_files_${workspaceUri.hashCode()}"
         prefs.edit().putString(key, uris.joinToString("|")).apply()
+    }
+
+    fun getActiveDocumentIdForWorkspace(workspaceUri: String): String? {
+        val key = "active_doc_${workspaceUri.hashCode()}"
+        return prefs.getString(key, null)
+    }
+
+    fun setActiveDocumentIdForWorkspace(workspaceUri: String, id: String?) {
+        val key = "active_doc_${workspaceUri.hashCode()}"
+        prefs.edit().putString(key, id).apply()
+        _activeDocumentId.value = id
     }
 }

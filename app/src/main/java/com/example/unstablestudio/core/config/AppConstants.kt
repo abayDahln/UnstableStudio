@@ -187,6 +187,7 @@ object AppConstants {
         const val KEEP_SCREEN_ON = "keep_screen_on"
         const val SHOW_LINE_NUMBERS = "show_line_numbers"
         const val USE_ORIGINAL_ICON_COLORS = "use_original_icon_colors"
+        const val ACTIVE_DOCUMENT_ID = "active_document_id"
     }
     
     // Notification Configuration

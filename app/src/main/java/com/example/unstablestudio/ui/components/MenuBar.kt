@@ -3,8 +3,6 @@ package com.example.unstablestudio.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -14,22 +12,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.unstablestudio.domain.model.EditorAction
 
 @Composable
 fun MenuBar(
     onFileOpen: () -> Unit,
     onFileSave: () -> Unit,
     onFileSaveAll: () -> Unit,
+    onFileExit: () -> Unit,
     onEditUndo: () -> Unit,
     onEditRedo: () -> Unit,
     onEditFind: () -> Unit,
-    onEditReplace: () -> Unit,
+    onEditCut: () -> Unit,
+    onEditCopy: () -> Unit,
+    onEditPaste: () -> Unit,
+    onSelectionSelectAll: () -> Unit,
+    onSelectionExpandSelection: () -> Unit,
+    onSelectionShrinkSelection: () -> Unit,
+    onSelectionCopyLineUp: () -> Unit,
+    onSelectionCopyLineDown: () -> Unit,
+    onSelectionMoveLineUp: () -> Unit,
+    onSelectionMoveLineDown: () -> Unit,
     onViewFontSizeIncrease: () -> Unit,
     onViewFontSizeDecrease: () -> Unit,
     onViewWordWrapToggle: () -> Unit,
+    onViewShortcutKeysShow: () -> Unit,
     onViewSettings: () -> Unit,
     onTerminalOpen: () -> Unit,
+    onCloseProject: () -> Unit,
     wordWrapEnabled: Boolean
 ) {
     var activeMenu by remember { mutableStateOf<String?>(null) }
@@ -40,7 +49,7 @@ fun MenuBar(
             .height(35.dp)
             .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 4.dp),
-        horizontalArrangement = Arrangement.Start,
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         // --- FILE MENU ---
@@ -49,19 +58,14 @@ fun MenuBar(
             expanded = activeMenu == "File",
             onToggle = { activeMenu = if (activeMenu == "File") null else "File" }
         ) {
-            MenuActionItem("New File", "Ctrl+N") { activeMenu = null }
-            MenuActionItem("New Window", "Ctrl+Shift+N") { activeMenu = null }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
             MenuActionItem("Open Folder...", "Ctrl+K Ctrl+O") { onFileOpen(); activeMenu = null }
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
             MenuActionItem("Save", "Ctrl+S") { onFileSave(); activeMenu = null }
-            MenuActionItem("Save As...", "Ctrl+Shift+S") { activeMenu = null }
-            MenuActionItem("Save All") { onFileSaveAll(); activeMenu = null }
+            MenuActionItem("Save All", "Ctrl+Shift+S") { onFileSaveAll(); activeMenu = null }
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-            MenuActionItem("Auto Save", isChecked = false) { activeMenu = null }
+            MenuActionItem("Close Project") { onCloseProject(); activeMenu = null }
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-            MenuActionItem("Settings", "Ctrl+,") { onViewSettings(); activeMenu = null }
-            MenuActionItem("Exit") { activeMenu = null }
+            MenuActionItem("Exit") { onFileExit(); activeMenu = null }
         }
 
         // --- EDIT MENU ---
@@ -73,15 +77,11 @@ fun MenuBar(
             MenuActionItem("Undo", "Ctrl+Z") { onEditUndo(); activeMenu = null }
             MenuActionItem("Redo", "Ctrl+Y") { onEditRedo(); activeMenu = null }
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-            MenuActionItem("Cut", "Ctrl+X") { activeMenu = null }
-            MenuActionItem("Copy", "Ctrl+C") { activeMenu = null }
-            MenuActionItem("Paste", "Ctrl+V") { activeMenu = null }
+            MenuActionItem("Cut", "Ctrl+X") { onEditCut(); activeMenu = null }
+            MenuActionItem("Copy", "Ctrl+C") { onEditCopy(); activeMenu = null }
+            MenuActionItem("Paste", "Ctrl+V") { onEditPaste(); activeMenu = null }
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
             MenuActionItem("Find", "Ctrl+F") { onEditFind(); activeMenu = null }
-            MenuActionItem("Replace", "Ctrl+H") { onEditReplace(); activeMenu = null }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-            MenuActionItem("Find in Files", "Ctrl+Shift+F") { activeMenu = null }
-            MenuActionItem("Replace in Files", "Ctrl+Shift+H") { activeMenu = null }
         }
 
         // --- SELECTION MENU ---
@@ -90,17 +90,14 @@ fun MenuBar(
             expanded = activeMenu == "Selection",
             onToggle = { activeMenu = if (activeMenu == "Selection") null else "Selection" }
         ) {
-            MenuActionItem("Select All", "Ctrl+A") { activeMenu = null }
-            MenuActionItem("Expand Selection", "Shift+Alt+Right") { activeMenu = null }
-            MenuActionItem("Shrink Selection", "Shift+Alt+Left") { activeMenu = null }
+            MenuActionItem("Select All", "Ctrl+A") { onSelectionSelectAll(); activeMenu = null }
+            MenuActionItem("Expand Selection", "Shift+Alt+Right") { onSelectionExpandSelection(); activeMenu = null }
+            MenuActionItem("Shrink Selection", "Shift+Alt+Left") { onSelectionShrinkSelection(); activeMenu = null }
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-            MenuActionItem("Copy Line Up", "Shift+Alt+Up") { activeMenu = null }
-            MenuActionItem("Copy Line Down", "Shift+Alt+Down") { activeMenu = null }
-            MenuActionItem("Move Line Up", "Alt+Up") { activeMenu = null }
-            MenuActionItem("Move Line Down", "Alt+Down") { activeMenu = null }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-            MenuActionItem("Add Cursor Above", "Ctrl+Alt+Up") { activeMenu = null }
-            MenuActionItem("Add Cursor Below", "Ctrl+Alt+Down") { activeMenu = null }
+            MenuActionItem("Copy Line Up", "Shift+Alt+Up") { onSelectionCopyLineUp(); activeMenu = null }
+            MenuActionItem("Copy Line Down", "Shift+Alt+Down") { onSelectionCopyLineDown(); activeMenu = null }
+            MenuActionItem("Move Line Up", "Alt+Up") { onSelectionMoveLineUp(); activeMenu = null }
+            MenuActionItem("Move Line Down", "Alt+Down") { onSelectionMoveLineDown(); activeMenu = null }
         }
 
         // --- VIEW MENU ---
@@ -120,6 +117,7 @@ fun MenuBar(
             MenuActionItem("Reset Zoom", "Ctrl+0") { activeMenu = null }
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
             MenuActionItem("Word Wrap", shortcut = "Alt+Z", isChecked = wordWrapEnabled) { onViewWordWrapToggle(); activeMenu = null }
+            MenuActionItem("Shortcut Keys") { onViewShortcutKeysShow(); activeMenu = null }
         }
 
         // --- TERMINAL MENU ---
@@ -149,7 +147,7 @@ fun MenuBar(
             MenuActionItem("About") { activeMenu = null }
         }
 
-        // --- SETTINGS MENU (Moved to top-level) ---
+        // --- SETTINGS MENU ---
         MenuItem(
             text = "Settings",
             expanded = activeMenu == "Settings",

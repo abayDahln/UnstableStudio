@@ -351,6 +351,9 @@ public class CodeEditor extends View implements ContentListener, Formatter.Forma
     private TextRange lastInsertion;
     private TextRange lastSelectedTextRange;
     private SnippetController snippetController;
+    private float lastMultiX, lastMultiY;
+    private float initialTouchX;
+    private boolean isTwoFingerScrolling = false;
 
     public CodeEditor(Context context) {
         this(context, null);
@@ -4663,14 +4666,83 @@ public class CodeEditor extends View implements ContentListener, Formatter.Forma
         if (!isEnabled()) {
             return false;
         }
+
+        int pointerCount = event.getPointerCount();
+        int action = event.getActionMasked();
+
+        if (action == MotionEvent.ACTION_DOWN) {
+            initialTouchX = event.getX();
+            lastMultiX = event.getX();
+            lastMultiY = event.getY();
+        }
+
         if (event.isFromSource(InputDevice.SOURCE_MOUSE) && props.mouseMode != DirectAccessProps.MOUSE_MODE_NEVER) {
+            // Click + drag kiri dari zona 40% kiri -> membuka sidebar
+            // Kami biarkan ACTION_DOWN di zona ini mengembalikan false agar parent (MainActivity) 
+            // bisa menangkap gesture drag untuk sidebar.
+            if (action == MotionEvent.ACTION_DOWN && initialTouchX < getWidth() * 0.4f) {
+                // Namun kita tetap ingin bisa klik di zona ini jika hanya tap biasa.
+                // Jadi kita kembalikan false di sini, tapi jika MainActivity mendeteksi 
+                // ini bukan drag, ia harus mengembalikan event ke sini (agak sulit di Android).
+                // Alternatif: Editor tetap handle mouse, tapi jika drag terdeteksi di parent, 
+                // ia akan meng-intercept. 
+                // Berdasarkan Plan, kita prioritaskan sidebar di zona 40%.
+                return false;
+            }
             return touchHandler.onMouseEvent(event);
         }
+
+        // Sidebar trigger zone (Touch only)
+        if (!event.isFromSource(InputDevice.SOURCE_MOUSE) && pointerCount == 1 && initialTouchX < getWidth() * 0.4f) {
+            // Kembalikan false agar MainActivity bisa menangani swipe sidebar
+            return false;
+        }
+
         if (isFormatting()) {
             touchHandler.reset2();
             scaleDetector.onTouchEvent(event);
             return basicDetector.onTouchEvent(event);
         }
+
+        // 2-Finger Horizontal Scroll
+        if (pointerCount == 2) {
+            isTwoFingerScrolling = true;
+            float currentX = (event.getX(0) + event.getX(1)) / 2;
+            float currentY = (event.getY(0) + event.getY(1)) / 2;
+
+            if (action == MotionEvent.ACTION_MOVE) {
+                float dx = lastMultiX - currentX;
+                touchHandler.scrollBy(dx, 0); // Horizontal only with 2 fingers
+            }
+            lastMultiX = currentX;
+            lastMultiY = currentY;
+
+            touchHandler.reset2();
+            return true;
+        }
+
+        if (isTwoFingerScrolling) {
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL || pointerCount < 2) {
+                isTwoFingerScrolling = false;
+                touchHandler.reset2();
+            }
+            return true;
+        }
+
+        // 1-Finger Vertical Only Scroll
+        if (pointerCount == 1 && action == MotionEvent.ACTION_MOVE) {
+            // Gunakan event palsu dengan X tetap untuk memaksa touchHandler hanya scroll vertikal
+            MotionEvent fakeEvent = MotionEvent.obtain(event);
+            fakeEvent.setLocation(initialTouchX, event.getY());
+            boolean res = touchHandler.onTouchEvent(fakeEvent);
+            fakeEvent.recycle();
+            
+            scaleDetector.onTouchEvent(event);
+            // basicDetector tetap menggunakan event asli agar tap/long-press di posisi yang benar
+            // namun basicDetector biasanya hanya dipanggil jika handlingMotions() false.
+            return res;
+        }
+
         boolean handlingBefore = touchHandler.handlingMotions();
         boolean res = touchHandler.onTouchEvent(event);
         boolean handling = touchHandler.handlingMotions();

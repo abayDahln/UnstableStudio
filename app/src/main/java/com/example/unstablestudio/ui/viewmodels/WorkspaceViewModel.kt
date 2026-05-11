@@ -29,6 +29,19 @@ data class CreatingNodeState(
     val isDirectory: Boolean
 )
 
+enum class ConflictSource {
+    CREATE, RENAME, MOVE
+}
+
+data class ConflictState(
+    val source: ConflictSource,
+    val targetName: String,
+    val targetParentUri: String,
+    val isDirectory: Boolean,
+    val originalNode: FileNode? = null,
+    val moveSourceParentUri: String? = null
+)
+
 sealed class WorkspaceFileEvent {
     data class Renamed(val oldUri: String, val newUri: String, val newName: String) : WorkspaceFileEvent()
     data class Deleted(val uri: String) : WorkspaceFileEvent()
@@ -51,6 +64,15 @@ class WorkspaceViewModel(
     private val _focusedNodeUri = MutableStateFlow<String?>(null)
     val focusedNodeUri: StateFlow<String?> = _focusedNodeUri.asStateFlow()
 
+    private val _renamingNodeUri = MutableStateFlow<String?>(null)
+    val renamingNodeUri: StateFlow<String?> = _renamingNodeUri.asStateFlow()
+
+    private val _conflictState = MutableStateFlow<ConflictState?>(null)
+    val conflictState: StateFlow<ConflictState?> = _conflictState.asStateFlow()
+
+    private val _errorMessage = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val errorMessage: SharedFlow<String> = _errorMessage.asSharedFlow()
+
     private val _fileEvents = MutableSharedFlow<WorkspaceFileEvent>(extraBufferCapacity = 32)
     val fileEvents: SharedFlow<WorkspaceFileEvent> = _fileEvents.asSharedFlow()
 
@@ -70,6 +92,37 @@ class WorkspaceViewModel(
 
     fun setFocus(uri: String?) {
         _focusedNodeUri.value = uri
+    }
+
+    /**
+     * Helper to check if two URIs point to the same document/tree.
+     * SAF URIs for the same item can have different string representations (Tree vs Document).
+     */
+    private fun areUrisEqual(uri1: String?, uri2: String?): Boolean {
+        if (uri1 == uri2) return true
+        if (uri1 == null || uri2 == null) return false
+        
+        try {
+            val u1 = android.net.Uri.parse(uri1)
+            val u2 = android.net.Uri.parse(uri2)
+            
+            // Compare document IDs if available
+            val id1 = try { android.provider.DocumentsContract.getDocumentId(u1) } catch (_: Exception) { null }
+            val id2 = try { android.provider.DocumentsContract.getDocumentId(u2) } catch (_: Exception) { null }
+            
+            if (id1 != null && id2 != null) return id1 == id2
+            
+            // Fallback to tree ID comparison
+            val tree1 = try { android.provider.DocumentsContract.getTreeDocumentId(u1) } catch (_: Exception) { null }
+            val tree2 = try { android.provider.DocumentsContract.getTreeDocumentId(u2) } catch (_: Exception) { null }
+            
+            if (tree1 != null && tree2 != null) return tree1 == tree2
+            
+        } catch (e: Exception) {
+            AppLogger.w(TAG, "Failed to compare URIs: $uri1 vs $uri2", e)
+        }
+        
+        return false
     }
 
     fun startCreating(parentUri: String?, isDirectory: Boolean) {
@@ -92,7 +145,7 @@ class WorkspaceViewModel(
 
     private fun findNodeByUri(nodes: List<FileNode>, uri: String): FileNode? {
         for (node in nodes) {
-            if (node.uri == uri) return node
+            if (areUrisEqual(node.uri, uri)) return node
             if (node.children != null) {
                 val found = findNodeByUri(node.children, uri)
                 if (found != null) return found
@@ -113,14 +166,125 @@ class WorkspaceViewModel(
         _creatingNode.value = null
     }
 
-    init {
-        // Auto-load last workspace on startup
-        settingsRepository.lastRootUri.value?.let { uri ->
-            if (uri.isNotEmpty()) {
-                openWorkspace(uri)
+    fun startRenaming(uri: String) {
+        _renamingNodeUri.value = uri
+    }
+
+    fun cancelRenaming() {
+        _renamingNodeUri.value = null
+    }
+
+    fun finishRenaming(node: FileNode, newName: String) {
+        if (newName.isNotBlank() && newName != node.name) {
+            renameFile(node, newName)
+        }
+        _renamingNodeUri.value = null
+    }
+
+    fun dismissConflict() {
+        _conflictState.value = null
+    }
+
+    fun resolveConflict(action: String, newName: String? = null) {
+        val state = _conflictState.value ?: return
+        _conflictState.value = null
+
+        when (action) {
+            "OVERWRITE" -> {
+                executeConflictAction(state, state.targetName, overwrite = true)
+            }
+            "AUTORENAME" -> {
+                viewModelScope.launch {
+                    val uniqueName = generateUniqueName(state.targetParentUri, state.targetName, state.isDirectory)
+                    executeConflictAction(state, uniqueName, overwrite = false)
+                }
+            }
+            "RENAME" -> {
+                if (!newName.isNullOrBlank()) {
+                    executeConflictAction(state, newName, overwrite = false)
+                }
             }
         }
     }
+
+    private fun executeConflictAction(state: ConflictState, finalName: String, overwrite: Boolean) {
+        viewModelScope.launch {
+            try {
+                when (state.source) {
+                    ConflictSource.CREATE -> {
+                        if (overwrite) {
+                            val existing = repository.listDirectory(state.targetParentUri).find { 
+                                it.name.normalizeForCompare() == finalName.normalizeForCompare() 
+                            }
+                            existing?.let { repository.deleteFile(it.uri) }
+                        }
+                        createFile(finalName, state.isDirectory, state.targetParentUri, skipConflictCheck = true)
+                    }
+                    ConflictSource.RENAME -> {
+                        val node = state.originalNode ?: return@launch
+                        if (overwrite) {
+                            val existing = repository.listDirectory(state.targetParentUri).find { 
+                                it.name.normalizeForCompare() == finalName.normalizeForCompare() && !areUrisEqual(it.uri, node.uri)
+                            }
+                            existing?.let { repository.deleteFile(it.uri) }
+                        }
+                        renameFile(node, finalName, skipConflictCheck = true)
+                    }
+                    ConflictSource.MOVE -> {
+                        val node = state.originalNode ?: return@launch
+                        val sourceParent = state.moveSourceParentUri ?: return@launch
+                        if (overwrite) {
+                            val existing = repository.listDirectory(state.targetParentUri).find { 
+                                it.name.normalizeForCompare() == finalName.normalizeForCompare() && !areUrisEqual(it.uri, node.uri)
+                            }
+                            existing?.let { repository.deleteFile(it.uri) }
+                        }
+                        
+                        var currentUri = node.uri
+                        if (finalName != node.name) {
+                            val renamed = repository.renameFile(node.uri, finalName)
+                            if (renamed != null) {
+                                currentUri = renamed.uri
+                            }
+                        }
+                        
+                        val movedNode = repository.moveFile(currentUri, sourceParent, state.targetParentUri)
+                        if (movedNode != null) {
+                            // Expand target folder after drop
+                            if (!areUrisEqual(state.targetParentUri, _rootUri.value)) {
+                                _expandedUris.value += state.targetParentUri
+                            }
+                            
+                            refreshAfterChange(currentUri)
+                            refreshFolder(state.targetParentUri)
+                            
+                            if (!areUrisEqual(sourceParent, state.targetParentUri)) {
+                                refreshFolder(sourceParent)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "Failed to resolve conflict for ${state.targetName}", e)
+            }
+        }
+    }
+
+    private suspend fun generateUniqueName(folderUri: String, baseName: String, isDirectory: Boolean): String {
+        var name = baseName
+        var index = 1
+        val dotIndex = baseName.lastIndexOf('.')
+        val nameWithoutExt = if (dotIndex != -1 && !isDirectory) baseName.substring(0, dotIndex) else baseName
+        val ext = if (dotIndex != -1 && !isDirectory) baseName.substring(dotIndex) else ""
+
+        while (isNameTakenInFolder(folderUri, name)) {
+            name = "${nameWithoutExt}_$index$ext"
+            index++
+        }
+        return name
+    }
+
+    // Redundant init restoration removed to allow MainActivity to coordinate session restore
 
     private val _fileTree = MutableStateFlow<List<FileNode>>(emptyList())
     val fileTree: StateFlow<List<FileNode>> = _fileTree.asStateFlow()
@@ -144,6 +308,7 @@ class WorkspaceViewModel(
 
     fun openWorkspace(uri: String) {
         _rootUri.value = uri
+        settingsRepository.setLastRootUri(uri)
         loadDirectory(uri)
     }
 
@@ -154,6 +319,7 @@ class WorkspaceViewModel(
     fun closeWorkspace() {
         _rootUri.value = null
         _fileTree.value = emptyList()
+        settingsRepository.setLastRootUri(null)
     }
 
     private fun loadDirectory(uri: String) {
@@ -182,23 +348,24 @@ class WorkspaceViewModel(
         }
     }
 
-    fun createFile(name: String, isDirectory: Boolean, parentUri: String? = null) {
+    fun createFile(name: String, isDirectory: Boolean, parentUri: String? = null, skipConflictCheck: Boolean = false) {
         val root = _rootUri.value ?: return
         val targetUri = parentUri ?: root
         val inputName = name.trim()
         if (inputName.isBlank()) return
         
-        // Only append .txt if it's a file (not a directory) AND it doesn't have an extension
-        val finalName = if (!isDirectory && !inputName.contains(".") && !inputName.startsWith(".")) {
-            "$inputName.txt"
-        } else {
-            inputName
-        }
+        // Use the input name as is
+        val finalName = inputName
 
         viewModelScope.launch {
             try {
-                if (isNameTakenInFolder(targetUri, finalName)) {
-                    AppLogger.w(TAG, "Skip create: duplicate name '$finalName' in $targetUri")
+                if (!skipConflictCheck && isNameTakenInFolder(targetUri, finalName)) {
+                    _conflictState.value = ConflictState(
+                        source = ConflictSource.CREATE,
+                        targetName = finalName,
+                        targetParentUri = targetUri,
+                        isDirectory = isDirectory
+                    )
                     return@launch
                 }
                 val newNode = repository.createFile(targetUri, finalName, isDirectory)
@@ -211,36 +378,46 @@ class WorkspaceViewModel(
         }
     }
 
-    fun moveFile(sourceNode: FileNode, targetParentUri: String) {
+    fun moveFile(sourceNode: FileNode, targetParentUri: String, skipConflictCheck: Boolean = false) {
         viewModelScope.launch {
             try {
                 val sourceParentUri = findParentUri(_fileTree.value, sourceNode.uri) ?: _rootUri.value
-                if (sourceParentUri == targetParentUri) {
+                if (areUrisEqual(sourceParentUri, targetParentUri)) {
                     AppLogger.d(TAG, "Skip move: source and target parent are the same")
                     return@launch
                 }
                 
+                if (!skipConflictCheck && isNameTakenInFolder(targetParentUri, sourceNode.name, excludeUri = sourceNode.uri)) {
+                    _conflictState.value = ConflictState(
+                        source = ConflictSource.MOVE,
+                        targetName = sourceNode.name,
+                        targetParentUri = targetParentUri,
+                        isDirectory = sourceNode.isDirectory,
+                        originalNode = sourceNode,
+                        moveSourceParentUri = sourceParentUri
+                    )
+                    return@launch
+                }
+
+                AppLogger.d(TAG, "Attempting to move: ${sourceNode.name} from $sourceParentUri to $targetParentUri")
                 val movedNode = sourceParentUri?.let { repository.moveFile(sourceNode.uri, it, targetParentUri) }
                 if (movedNode != null) {
+                    AppLogger.d(TAG, "Move successful: ${movedNode.uri}")
                     // Mark target folder as expanded so it remains open (if it's not root)
-                    if (targetParentUri != _rootUri.value) {
+                    if (!areUrisEqual(targetParentUri, _rootUri.value)) {
                         _expandedUris.value += targetParentUri
                     }
                     
                     // Surgical refresh
-                    if (targetParentUri == _rootUri.value) {
-                        _rootUri.value?.let { loadDirectory(it) }
-                    } else {
-                        refreshFolder(targetParentUri)
-                    }
+                    refreshAfterChange(sourceNode.uri)
+                    refreshFolder(targetParentUri)
                     
-                    if (sourceParentUri != null && sourceParentUri != targetParentUri) {
-                        if (sourceParentUri == _rootUri.value) {
-                            loadDirectory(sourceParentUri)
-                        } else {
-                            refreshFolder(sourceParentUri)
-                        }
+                    if (sourceParentUri != null && !areUrisEqual(sourceParentUri, targetParentUri)) {
+                        refreshFolder(sourceParentUri)
                     }
+                } else {
+                    AppLogger.e(TAG, "Repository moveFile returned null for ${sourceNode.name}")
+                    _errorMessage.emit("Failed to move '${sourceNode.name}'. Make sure you have permission.")
                 }
             } catch (e: Exception) {
                 AppLogger.e(TAG, "Failed to move file: ${sourceNode.uri}", e)
@@ -260,7 +437,7 @@ class WorkspaceViewModel(
             try {
                 val children = repository.listDirectory(uri)
                 val updatedChildren = restoreExpansionState(children)
-                if (uri == _rootUri.value) {
+                if (areUrisEqual(uri, _rootUri.value)) {
                     _fileTree.value = updatedChildren
                 } else {
                     _fileTree.value = updateNodeInTree(_fileTree.value, uri) { target ->
@@ -287,7 +464,7 @@ class WorkspaceViewModel(
         }
     }
 
-    fun renameFile(node: FileNode, newName: String) {
+    fun renameFile(node: FileNode, newName: String, skipConflictCheck: Boolean = false) {
         val trimmedName = newName.trim()
         if (trimmedName.isBlank()) return
 
@@ -298,8 +475,14 @@ class WorkspaceViewModel(
                 }
 
                 val parentUri = findParentUri(_fileTree.value, node.uri) ?: _rootUri.value
-                if (parentUri != null && isNameTakenInFolder(parentUri, trimmedName, excludeUri = node.uri)) {
-                    AppLogger.w(TAG, "Skip rename: duplicate name '$trimmedName' in $parentUri")
+                if (parentUri != null && !skipConflictCheck && isNameTakenInFolder(parentUri, trimmedName, excludeUri = node.uri)) {
+                    _conflictState.value = ConflictState(
+                        source = ConflictSource.RENAME,
+                        targetName = trimmedName,
+                        targetParentUri = parentUri,
+                        isDirectory = node.isDirectory,
+                        originalNode = node
+                    )
                     return@launch
                 }
 
@@ -325,7 +508,7 @@ class WorkspaceViewModel(
         val parentUri = findParentUri(_fileTree.value, targetUri)
         when {
             parentUri != null -> refreshFolder(parentUri)
-            targetUri == root -> loadDirectory(root)
+            areUrisEqual(targetUri, root) -> loadDirectory(root)
             else -> loadDirectory(root)
         }
     }
@@ -355,7 +538,7 @@ class WorkspaceViewModel(
         update: (FileNode) -> FileNode
     ): List<FileNode> {
         return nodes.map { node ->
-            if (node.uri == targetUri) {
+            if (areUrisEqual(node.uri, targetUri)) {
                 update(node)
             } else if (node.children != null) {
                 node.copy(children = updateNodeInTree(node.children, targetUri, update))
@@ -387,14 +570,14 @@ class WorkspaceViewModel(
     ): Boolean {
         val normalizedTarget = targetName.normalizeForCompare()
         return repository.listDirectory(folderUri).any { child ->
-            if (excludeUri != null && child.uri == excludeUri) return@any false
+            if (excludeUri != null && areUrisEqual(child.uri, excludeUri)) return@any false
             child.name.normalizeForCompare() == normalizedTarget
         }
     }
 
     fun findParentUri(nodes: List<FileNode>, targetUri: String, parentUri: String? = null): String? {
         for (node in nodes) {
-            if (node.uri == targetUri) return parentUri
+            if (areUrisEqual(node.uri, targetUri)) return parentUri
             val children = node.children ?: continue
             val found = findParentUri(children, targetUri, node.uri)
             if (found != null) return found

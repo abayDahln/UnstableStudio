@@ -27,10 +27,10 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 
 private const val TAG = "EditorViewModel"
-
-data class Diagnostic(val line: Int, val column: Int, val message: String)
 
 data class PendingChange(
     val docId: String,
@@ -161,6 +161,37 @@ class EditorViewModel(
     fun setActiveFile(id: String) {
         if (_openDocuments.value.any { it.id == id }) {
             _activeDocumentId.value = id
+        }
+    }
+
+    suspend fun restoreSession(ids: List<String>, activeId: String?) {
+        if (ids.isEmpty()) return
+        
+        withContext(Dispatchers.IO) {
+            val loadedDocs = mutableListOf<Document>()
+            for (id in ids) {
+                try {
+                    // Check if already open
+                    val existing = _openDocuments.value.find { it.id == id }
+                    if (existing != null) {
+                        loadedDocs.add(existing)
+                    } else {
+                        val document = repository.loadDocument(id)
+                        loadedDocs.add(document)
+                    }
+                } catch (e: Exception) {
+                    AppLogger.e(TAG, "Failed to restore file: $id", e)
+                }
+            }
+            
+            if (loadedDocs.isNotEmpty()) {
+                _openDocuments.value = loadedDocs
+                if (activeId != null && loadedDocs.any { it.id == activeId }) {
+                    _activeDocumentId.value = activeId
+                } else if (loadedDocs.isNotEmpty()) {
+                    _activeDocumentId.value = loadedDocs.last().id
+                }
+            }
         }
     }
 

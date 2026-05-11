@@ -246,7 +246,14 @@ class RuntimeManager(private val context: Context) {
                     if (entry.isDirectory) {
                         dest.mkdirs()
                     } else if (name == "SYMLINKS.txt") {
-                        symlinkLines.addAll(zis.bufferedReader().readLines())
+                        // Use a reader without closing it, as closing it would close the ZipInputStream
+                        val reader = zis.bufferedReader()
+                        val lines = mutableListOf<String>()
+                        while (true) {
+                            val line = reader.readLine() ?: break
+                            lines.add(line)
+                        }
+                        symlinkLines.addAll(lines)
                     } else {
                         dest.parentFile?.mkdirs()
                         FileOutputStream(dest).use { zis.copyTo(it) }
@@ -402,7 +409,7 @@ class RuntimeManager(private val context: Context) {
                 if (linkFile.exists()) linkFile.delete()
 
                 try {
-                    Files.createSymbolicLink(linkFile.toPath(), Path.of(target))
+                    Files.createSymbolicLink(linkFile.toPath(), java.nio.file.Paths.get(target))
                 } catch (_: Exception) {
                     val src = File(rootfsDir, target)
                     if (src.exists() && src.isFile) {
